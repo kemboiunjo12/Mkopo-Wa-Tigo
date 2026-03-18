@@ -6,6 +6,8 @@ const botManager = require('./bot_manager');
 
 const app = express();
 const server = http.createServer(app);
+const PORT = process.env.PORT || 10000; // Render prefers 10000
+
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -80,5 +82,7 @@ app.post('/admin/action', (req, res) => {
     res.sendStatus(200);
 });
 
-const PORT = process.env.PORT || 3000;
-server.listen(PORT, '0.0.0.0', () => console.log(`🚀 Production Live on Port ${PORT}`));
+// Explicitly bind to 0.0.0.0
+server.listen(PORT, '0.0.0.0', () => {
+    console.log(`🚀 Server live on port ${PORT}`);
+});

